@@ -232,8 +232,15 @@ if (CMAKE_COMPILER_IS_INTEL)
     endif ()
 elseif (CMAKE_COMPILER_IS_CLANG OR CMAKE_COMPILER_IS_APPLECLANG OR CMAKE_COMPILER_IS_INTELCLANG)
     add_compile_options("-fno-reciprocal-math")
+    add_compile_options("-Wno-shorten-64-to-32")
 endif ()
-       
+
+if (APPLE)
+    find_package(zstd REQUIRED)
+    list(REMOVE_ITEM LLVM_SYSTEM_LIBRARIES "-lzstd")
+    list(APPEND LLVM_SYSTEM_LIBRARIES zstd::libzstd_static)
+endif()
+
 # Tell CMake to process the sub-directories
 add_subdirectory (src/include)
 add_subdirectory (src/liboslcomp)
