@@ -20,7 +20,7 @@ using namespace OSL::pvt;
 #include "llvm/IR/Module.h"
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 namespace pvt {  // OSL::pvt
 
@@ -524,6 +524,7 @@ public:
 
     /// Return whether or not we are compiling for an OptiX-based renderer.
     bool use_optix() { return m_use_optix; }
+    bool use_optix_cache() { return shadingsys().use_optix_cache(); }
 
     /// Return if we should compile against free function versions of Renderer Service.
     bool use_rs_bitcode() { return m_use_rs_bitcode; }
@@ -657,4 +658,4 @@ append_constant_arg(BackendLLVM& rop, const TArgVariant& arg,
 
 
 };  // namespace pvt
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

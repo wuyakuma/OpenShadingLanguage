@@ -11,11 +11,10 @@
 #include <OpenImageIO/strutil.h>
 #include <OpenImageIO/thread.h>
 
-#include "../liboslcomp/oslcomp_pvt.h"
 #include "oslexec_pvt.h"
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 namespace pvt {  // OSL::pvt
 
 ShaderMaster::ShaderMaster(ShadingSystemImpl& shadingsys)
@@ -258,4 +257,4 @@ ShaderMaster::print()
 }
 
 };  // namespace pvt
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

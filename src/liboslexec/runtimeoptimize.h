@@ -20,7 +20,7 @@ using namespace OSL;
 using namespace OSL::pvt;
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 namespace pvt {  // OSL::pvt
 
@@ -460,6 +460,8 @@ public:
                        fmtformat(fmt, std::forward<Args>(args)...));
     }
 
+    std::string serialize();
+
 private:
     int m_optimize;                        ///< Current optimization level
     bool m_opt_simplify_param;             ///< Turn instance params into const?
@@ -531,4 +533,4 @@ private:
 
 
 };  // namespace pvt
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

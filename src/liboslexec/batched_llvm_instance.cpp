@@ -27,7 +27,6 @@
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/DerivedTypes.h>
 
-#include "../liboslcomp/oslcomp_pvt.h"
 #include "batched_backendllvm.h"
 #include "oslexec_pvt.h"
 
@@ -124,7 +123,7 @@ extern unsigned char osl_llvm_compiled_ops_block[];
 
 using namespace OSL::pvt;
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 namespace pvt {
 
@@ -139,6 +138,9 @@ static ustring op_aref("aref");
 static ustring op_compref("compref");
 static ustring op_mxcompref("mxcompref");
 static ustring op_useparam("useparam");
+static ustring op_pointcloud_get("pointcloud_get");
+static ustring op_spline("spline");
+static ustring op_splineinverse("splineinverse");
 static ustring unknown_shader_group_name("<Unknown Shader Group Name>");
 
 
@@ -1190,11 +1192,8 @@ BatchedBackendLLVM::llvm_assign_initial_value(
 
         llvm::Value* got_userdata = nullptr;
         // See if userdata input placement has been used for this symbol
-        ustring layersym = ustring::fmtformat("{}.{}", inst()->layername(),
-                                              sym.name());
-        symloc           = group().find_symloc(layersym, SymArena::UserData);
-        if (!symloc)
-            symloc = group().find_symloc(sym.name(), SymArena::UserData);
+        symloc = group().find_symloc(sym.name(), inst()->layername(),
+                                     SymArena::UserData);
         if (symloc) {
             // We had a userdata pre-placement record for this variable.
             // Just copy from the correct offset location!
@@ -1624,7 +1623,8 @@ BatchedBackendLLVM::llvm_generate_debug_uninit(const Opcode& op)
         }
 
         llvm::Value* ncheck = ll.constant(int(t.numelements() * t.aggregate));
-        llvm::Value* offset = ll.constant(0);
+        llvm::Value* varying_nchecks = nullptr;
+        llvm::Value* offset          = ll.constant(0);
         BatchedBackendLLVM::TempScope temp_scope(*this);
         llvm::Value* loc_varying_offsets = nullptr;
 
@@ -1705,6 +1705,31 @@ BatchedBackendLLVM::llvm_generate_debug_uninit(const Opcode& op)
                 ll.op_store(comp, loc_varying_offsets);
             }
             ncheck = ll.constant(1);
+        } else if (op.opname() == op_pointcloud_get && i == 2) {
+            // int pointcloud_get (string ptcname, int indices[], int count, string attr, type data[])
+            // will only read indices[0..count-1], so limit the check to count
+            OSL_ASSERT(3 < op.nargs());
+            Symbol& count_sym = *opargsym(op, 3);
+            if (count_sym.is_uniform()) {
+                ncheck = llvm_load_value(count_sym);
+            } else {
+                // Don't think we can have a uniform indices array that
+                // has a varying index count
+                if (!sym.is_uniform()) {
+                    varying_nchecks = ll.void_ptr(llvm_get_pointer(count_sym));
+                }
+            }
+        } else if (((op.opname() == op_spline)
+                    || (op.opname() == op_splineinverse))
+                   && i == 4) {
+            // If an explicit knot count was provided to spline|splineinverse we should
+            // limit our check of knot values to that count
+            bool has_knot_count = (op.nargs() == 5);
+            if (has_knot_count) {
+                Symbol& knot_count_sym = *opargsym(op, 3);
+                OSL_ASSERT(knot_count_sym.is_uniform());
+                ncheck = llvm_load_value(knot_count_sym);
+            }
         }
 
         if (loc_varying_offsets != nullptr) {
@@ -1728,15 +1753,15 @@ BatchedBackendLLVM::llvm_generate_debug_uninit(const Opcode& op)
             if (sym.is_uniform()) {
                 ll.call_function(build_name(
                                      FuncSpec("uninit_check_values_offset")
-                                         .arg_uniform(TypeDesc::PTR)
-                                         .arg_varying(TypeInt)
+                                         .arg_uniform(TypeDesc::PTR)  // vals
+                                         .arg_varying(TypeInt)  // firstcheck
                                          .mask()),
                                  args);
             } else {
                 ll.call_function(build_name(
                                      FuncSpec("uninit_check_values_offset")
-                                         .arg_varying(TypeDesc::PTR)
-                                         .arg_varying(TypeInt)
+                                         .arg_varying(TypeDesc::PTR)  // vals
+                                         .arg_varying(TypeInt)  // firstcheck
                                          .mask()),
                                  args);
             }
@@ -1760,33 +1785,60 @@ BatchedBackendLLVM::llvm_generate_debug_uninit(const Opcode& op)
                         ncheck };
                 ll.call_function(build_name(
                                      FuncSpec("uninit_check_values_offset")
-                                         .arg_uniform(TypeDesc::PTR)
-                                         .arg_uniform(TypeInt)),
+                                         .arg_uniform(TypeDesc::PTR)  // vals
+                                         .arg_uniform(TypeInt)),  // firstcheck
                                  args);
             } else {
-                llvm::Value* args[]
-                    = { ll.mask_as_int(ll.current_mask()),
-                        ll.constant(t),
-                        llvm_void_ptr(sym),
-                        sg_void_ptr(),
-                        ll.constant(op.sourcefile()),
-                        ll.constant(op.sourceline()),
-                        ll.constant(group().name()),
-                        ll.constant(layer()),
-                        ll.constant(inst()->layername()),
-                        ll.constant(inst()->shadername().c_str()),
-                        ll.constant(int(&op - &inst()->ops()[0])),
-                        ll.constant(op.opname()),
-                        ll.constant(i),
-                        ll.constant(sym.unmangled()),
-                        offset,
-                        ncheck };
-                ll.call_function(build_name(
-                                     FuncSpec("uninit_check_values_offset")
-                                         .arg_varying(TypeDesc::PTR)
-                                         .arg_uniform(TypeInt)
-                                         .mask()),
-                                 args);
+                if (varying_nchecks != nullptr) {
+                    llvm::Value* args[]
+                        = { ll.mask_as_int(ll.current_mask()),
+                            ll.constant(t),
+                            llvm_void_ptr(sym),
+                            sg_void_ptr(),
+                            ll.constant(op.sourcefile()),
+                            ll.constant(op.sourceline()),
+                            ll.constant(group().name()),
+                            ll.constant(layer()),
+                            ll.constant(inst()->layername()),
+                            ll.constant(inst()->shadername().c_str()),
+                            ll.constant(int(&op - &inst()->ops()[0])),
+                            ll.constant(op.opname()),
+                            ll.constant(i),
+                            ll.constant(sym.unmangled()),
+                            offset,
+                            varying_nchecks };
+                    ll.call_function(
+                        build_name(FuncSpec("uninit_check_values_offset")
+                                       .arg_varying(TypeDesc::PTR)  // vals
+                                       .arg_uniform(TypeInt)  // firstcheck
+                                       .arg_varying(TypeInt)  // nchecks
+                                       .mask()),
+                        args);
+                } else {
+                    llvm::Value* args[]
+                        = { ll.mask_as_int(ll.current_mask()),
+                            ll.constant(t),
+                            llvm_void_ptr(sym),
+                            sg_void_ptr(),
+                            ll.constant(op.sourcefile()),
+                            ll.constant(op.sourceline()),
+                            ll.constant(group().name()),
+                            ll.constant(layer()),
+                            ll.constant(inst()->layername()),
+                            ll.constant(inst()->shadername().c_str()),
+                            ll.constant(int(&op - &inst()->ops()[0])),
+                            ll.constant(op.opname()),
+                            ll.constant(i),
+                            ll.constant(sym.unmangled()),
+                            offset,
+                            ncheck };
+                    ll.call_function(
+                        build_name(FuncSpec("uninit_check_values_offset")
+                                       .arg_varying(TypeDesc::PTR)  // vals
+                                       .arg_uniform(TypeInt)  // firstcheck
+                                       .mask()),
+                        args);
+                }
             }
         }
     }
@@ -2361,13 +2413,8 @@ BatchedBackendLLVM::build_llvm_instance(bool groupentry)
     {
         if (!s.renderer_output())  // Skip if not a renderer output
             continue;
-        // Try to look up the sym among the outputs with the full layer.name
-        // specification first. If that fails, look for name only.
-        ustring layersym = ustring::fmtformat("{}.{}", inst()->layername(),
-                                              s.name());
-        auto symloc      = group().find_symloc(layersym, SymArena::Outputs);
-        if (!symloc)
-            symloc = group().find_symloc(s.name(), SymArena::Outputs);
+        auto symloc = group().find_symloc(s.name(), inst()->layername(),
+                                          SymArena::Outputs);
         if (!symloc) {
             // std::cout << "No output copy for " << s.name()
             //           << " because no symloc was found\n";
@@ -2969,4 +3016,4 @@ BatchedBackendLLVM::run()
 
 
 };  // namespace pvt
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

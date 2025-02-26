@@ -16,6 +16,8 @@
 #include <OSL/fmt_util.h>
 #include <OSL/hashes.h>
 
+#include <OpenImageIO/Imath.h>
+
 #include <OpenImageIO/fmath.h>
 #include <OpenImageIO/simd.h>
 
@@ -24,7 +26,7 @@
 
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 namespace pvt {
 
 
@@ -343,4 +345,4 @@ osl_determinant_fm(void* m)
 
 
 }  // namespace pvt
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

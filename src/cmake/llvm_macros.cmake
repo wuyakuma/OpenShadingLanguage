@@ -38,7 +38,12 @@ function ( EMBED_LLVM_BITCODE_IN_CPP src_list suffix output_name list_to_append_
         if (NOT LLVM_BC_GENERATOR)
             message (FATAL_ERROR "You must have a valid llvm bitcode generator (clang++) somewhere.")
         endif ()
-        message (VERBOSE "Using LLVM_BC_GENERATOR ${LLVM_BC_GENERATOR} to generate bitcode.")
+        if (LLVM_BC_GENERATOR)
+            execute_process ( COMMAND ${LLVM_BC_GENERATOR} -dumpversion
+                              OUTPUT_VARIABLE LLVM_BC_GENERATOR_VERSION
+                              OUTPUT_STRIP_TRAILING_WHITESPACE )
+        endif ()
+        message (VERBOSE "Using LLVM_BC_GENERATOR ${LLVM_BC_GENERATOR} v${LLVM_BC_GENERATOR_VERSION} to generate bitcode.")
 
         if (NOT LLVM_AS_TOOL)
             find_program (LLVM_AS_TOOL NAMES "llvm-as"
@@ -54,20 +59,15 @@ function ( EMBED_LLVM_BITCODE_IN_CPP src_list suffix output_name list_to_append_
                     NO_SYSTEM_ENVIRONMENT_PATH NO_CMAKE_ENVIRONMENT_PATH)
         endif ()
 
-
-        # Fix specific problem I had on new Apple systems (e.g. Mavericks) with
-        # LLVM/libc++ installed -- for some reason, LLVM 3.4 wasn't finding it,
-        # so in that specific case, append another -I to point it in the right
-        # direction.
-        #if (APPLE AND ${LLVM_BC_GENERATOR} MATCHES ".*clang.*")
-        #    exec_program ( "${LLVM_BC_GENERATOR}" ARGS --version OUTPUT_VARIABLE MY_CLANG_VERSION )
-        #    string (REGEX REPLACE "clang version ([0-9][.][0-9]+).*" "\\1" MY_CLANG_VERSION "${MY_CLANG_VERSION}")
-        #    if ((${MY_CLANG_VERSION} VERSION_GREATER "3.3")
-        #          AND (EXISTS "/usr/lib/libc++.dylib")
-        #          AND (EXISTS "/Library/Developer/CommandLineTools/usr/lib/c++/v1"))
-        #        set (LLVM_COMPILE_FLAGS ${LLVM_COMPILE_FLAGS} "-I/Library/Developer/CommandLineTools/usr/lib/c++/v1")
-        #    endif ()
-        #endif ()
+        if (APPLE)
+            list (APPEND LLVM_COMPILE_FLAGS -isysroot ${CMAKE_OSX_SYSROOT})
+            if (CMAKE_OSX_DEPLOYMENT_TARGET)
+                list (APPEND LLVM_COMPILE_FLAGS -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET})
+            endif ()
+            if (CMAKE_OSX_ARCHITECTURES)
+                list (APPEND LLVM_COMPILE_FLAGS -arch ${CMAKE_OSX_ARCHITECTURES})
+            endif ()
+        endif ()
 
         list (TRANSFORM include_dirs PREPEND -I
             OUTPUT_VARIABLE ALL_INCLUDE_DIRS)

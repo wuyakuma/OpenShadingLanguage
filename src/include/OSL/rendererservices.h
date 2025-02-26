@@ -10,7 +10,7 @@
 #include <OSL/variant.h>
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 class RendererServices;
 template<int WidthT> class BatchedRendererServices;
@@ -580,6 +580,19 @@ public:
         }
     };
 
+    // Default no-op implementations of the caching api.
+    // Currently used for caching optix ptx before llvm generation.
+    virtual void cache_insert(string_view cachename, string_view key,
+                              string_view value) const
+    {
+    }
+
+    virtual bool cache_get(string_view cachename, string_view key,
+                           std::string& value) const
+    {
+        return false;
+    }
+
     /// A renderer may choose to support batched execution by providing pointers
     /// to objects satisfying the BatchedRendererServices<WidthOf<#>> interface
     /// for specific batch sizes.
@@ -594,4 +607,4 @@ protected:
 
 
 OSL_PRAGMA_WARNING_POP
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

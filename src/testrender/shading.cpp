@@ -39,7 +39,7 @@ is_black(const Color3& c)
 }  // anonymous namespace
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 
 #ifndef __CUDACC__
@@ -231,7 +231,7 @@ register_closures(OSL::ShadingSystem* shadingsys)
 }
 #endif  // ifndef __CUDACC__
 
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END
 
 namespace {  // anonymous namespace
 
@@ -885,10 +885,8 @@ struct MxMicrofacet final : public BSDF, MxMicrofacetParams {
         // if transmission is enabled, punt on
         if (EnableTransmissionLobe)
             return Color3(1.0f);
-        // FIXME: this heuristic is not particularly good, and looses energy
-        // compared to the reference solution
 
-        return MxMicrofacetParams::evalR(
+        return MxMicrofacetParams::dirAlbedoR(
             get_fresnel_angle(MxMicrofacetParams::N.dot(wo)));
     }
 
@@ -1846,7 +1844,7 @@ process_bsdf_closure(const ShaderGlobalsType& sg, ShadingResult& result,
 
 }  // anonymous namespace
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 OSL_HOSTDEVICE void
 process_closure(const ShaderGlobalsType& sg, ShadingResult& result,
@@ -2211,4 +2209,4 @@ CompositeBSDF::eval(const BSDF* bsdf, const Vec3& wo, const Vec3& wi) const
 }
 
 
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

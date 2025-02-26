@@ -33,7 +33,8 @@ if (DEFINED ENV{LLVM_ROOT})
 endif ()
 list (APPEND LLVM_CONFIG_PATH_HINTS
         "/usr/local/opt/llvm/${LLVM_VERSION}/bin/"
-        "/usr/local/opt/llvm/bin/")
+        "/usr/local/opt/llvm/bin/"
+        "C:/Program Files/LLVM/bin")
 find_program (LLVM_CONFIG
               NAMES llvm-config-${LLVM_VERSION} llvm-config
                     llvm-config-64-${LLVM_VERSION} llvm-config-64
@@ -76,6 +77,9 @@ else ()
 endif ()
 string (REPLACE " " ";" LLVM_SYSTEM_LIBRARIES "${LLVM_SYSTEM_LIBRARIES}")
 
+# Seems necessary on our Windows CI?
+string (REPLACE "libxml2s.lib" "" LLVM_SYSTEM_LIBRARIES "${LLVM_SYSTEM_LIBRARIES}")
+
 find_library ( LLVM_LIBRARY
                NAMES LLVM-${LLVM_VERSION} LLVM
                PATHS ${LLVM_LIB_DIR}
@@ -99,7 +103,7 @@ endif ()
 execute_process (COMMAND ${LLVM_CONFIG} --shared-mode
        OUTPUT_VARIABLE LLVM_SHARED_MODE
        OUTPUT_STRIP_TRAILING_WHITESPACE)
-if (LLVM_VERSION VERSION_GREATER_EQUAL 9.0 AND (LLVM_SHARED_MODE STREQUAL "shared"))
+if (LLVM_SHARED_MODE STREQUAL "shared")
     find_library ( _CLANG_CPP_LIBRARY
                    NAMES "clang-cpp"
                    PATHS ${LLVM_LIB_DIR}

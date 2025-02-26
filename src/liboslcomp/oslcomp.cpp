@@ -36,7 +36,7 @@
 #include <llvm/Support/raw_ostream.h>
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 
 OSLCompiler::OSLCompiler(ErrorHandler* errhandler)
@@ -590,7 +590,7 @@ OSLCompilerImpl::write_dependency_file(string_view filename)
                          : OIIO::Filesystem::fopen(m_deps_filename, "w"));
     if (depfile) {
         OSL::print(depfile, "{}: {}", target, filename);
-        for (const auto& dep : m_file_dependencies) {
+        for (ustring dep : m_file_dependencies) {
             if (OIIO::Strutil::ends_with(dep, "stdosl.h")
                 && !m_generate_system_deps)
                 continue;  // skip system headers if so instructed
@@ -598,6 +598,16 @@ OSLCompilerImpl::write_dependency_file(string_view filename)
                 continue;  // skip pseudo files
             if (dep == filename)
                 continue;  // skip this file, since we already put it first
+#if defined(_WIN32) && defined(OSL_CI)
+            // Special behavior for CI on Windows: remove the directory paths
+            // for the dependencies, or else it won't match the reference
+            // output.
+            using OIIO::Strutil::replace;
+            std::string cwd = replace(OIIO::Filesystem::current_path() + "/",
+                                      "/", "\\", true);
+            auto d          = replace(dep, "\\\\", "\\", true);
+            dep             = ustring(replace(d, cwd, ""));
+#endif
             OSL::print(depfile, " \\\n  {}", dep);
         }
         OSL::print(depfile, "\n");
@@ -1393,4 +1403,4 @@ OSLCompilerImpl::syms_used_in_op_range(OpcodeVec::const_iterator opbegin,
 
 };  // namespace pvt
 
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

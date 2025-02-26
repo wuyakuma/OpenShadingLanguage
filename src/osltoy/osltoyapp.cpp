@@ -55,7 +55,7 @@
 #include "qtutils.h"
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 using namespace QtUtils;
 
 class ValueSlider final : public QSlider {
@@ -1298,8 +1298,13 @@ OSLToyMainWindow::make_param_adjustment_row(ParamRec* param,
     auto diddleCheckbox = new QCheckBox("  ");
     if (m_diddlers[param->name.string()])
         diddleCheckbox->setCheckState(Qt::Checked);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    connect(diddleCheckbox, &QCheckBox::checkStateChanged, this,
+            [=](Qt::CheckState state) { set_param_diddle(param, int(state)); });
+#else
     connect(diddleCheckbox, &QCheckBox::stateChanged, this,
             [=](int state) { set_param_diddle(param, state); });
+#endif
     layout->addWidget(diddleCheckbox, row, 0);
 
     std::string typetext(param->type.c_str());
@@ -1563,4 +1568,4 @@ OSLToyMainWindow::mousePressEvent(QMouseEvent* event)
 
 
 
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

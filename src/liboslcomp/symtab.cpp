@@ -5,13 +5,14 @@
 #include <string>
 #include <vector>
 
-#include "oslcomp_pvt.h"
+#include "osl_pvt.h"
+#include "symtab.h"
 
 #include <OpenImageIO/strutil.h>
 namespace Strutil = OIIO::Strutil;
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 namespace pvt {  // OSL::pvt
 
@@ -421,4 +422,4 @@ track_variable_lifetimes_main(const OpcodeVec& code, const SymbolPtrVec& opargs,
 
 };  // namespace pvt
 
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

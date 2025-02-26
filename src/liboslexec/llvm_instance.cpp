@@ -18,7 +18,6 @@
 #include <OpenImageIO/sysutil.h>
 #include <OpenImageIO/timer.h>
 
-#include "../liboslcomp/oslcomp_pvt.h"
 #include "oslexec_pvt.h"
 #include "backendllvm.h"
 
@@ -129,7 +128,7 @@ extern unsigned char shadeops_cuda_llvm_compiled_ops_block[];
 
 using namespace OSL::pvt;
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 namespace pvt {
 
@@ -144,6 +143,9 @@ static ustring op_aref("aref");
 static ustring op_compref("compref");
 static ustring op_mxcompref("mxcompref");
 static ustring op_useparam("useparam");
+static ustring op_pointcloud_get("pointcloud_get");
+static ustring op_spline("spline");
+static ustring op_splineinverse("splineinverse");
 static ustring unknown_shader_group_name("<Unknown Shader Group Name>");
 
 
@@ -818,11 +820,8 @@ BackendLLVM::llvm_assign_initial_value(const Symbol& sym, bool force)
         llvm::Value* got_userdata = nullptr;
 
         // See if userdata input placement has been used for this symbol
-        ustring layersym = ustring::fmtformat("{}.{}", inst()->layername(),
-                                              sym.name());
-        symloc           = group().find_symloc(layersym, SymArena::UserData);
-        if (!symloc)
-            symloc = group().find_symloc(sym.name(), SymArena::UserData);
+        symloc = group().find_symloc(sym.name(), inst()->layername(),
+                                     SymArena::UserData);
         if (symloc) {
             // We had a userdata pre-placement record for this variable.
             // Just copy from the correct offset location!
@@ -1139,8 +1138,10 @@ BackendLLVM::llvm_generate_debug_uninit(const Opcode& op)
             // don't generate uninit test code for it.
             continue;
         }
-        if (op.opname() == Strings::op_dowhile && i == 0) {
-            // The first argument of 'dowhile' is the condition temp, but
+        if (((op.opname() == Strings::op_dowhile)
+             || (op.opname() == Strings::op_while))
+            && i == 0) {
+            // The first argument of 'dowhile' or "while" is the condition temp, but
             // most likely its initializer has not run yet. Unless there is
             // no "condition" code block, in that case we should still test
             // it for uninit.
@@ -1189,6 +1190,20 @@ BackendLLVM::llvm_generate_debug_uninit(const Opcode& op)
             comp              = ll.op_add(comp, col_ind);
             offset            = comp;
             ncheck            = ll.constant(1);
+        } else if (op.opname() == op_pointcloud_get && i == 2) {
+            // int pointcloud_get (string ptcname, int indices[], int count, string attr, type data[])
+            // will only read indices[0..count-1], so limit the check to count
+            OSL_ASSERT(3 < op.nargs());
+            ncheck = llvm_load_value(*opargsym(op, 3));
+        } else if (((op.opname() == op_spline)
+                    || (op.opname() == op_splineinverse))
+                   && i == 4) {
+            // If an explicit knot count was provided to spline|splineinverse we should
+            // limit our check of knot values to that count
+            bool has_knot_count = (op.nargs() == 5);
+            if (has_knot_count) {
+                ncheck = llvm_load_value(*opargsym(op, 3));
+            }
         }
 
         llvm::Value* args[] = { ll.constant(t),
@@ -1793,13 +1808,8 @@ BackendLLVM::build_llvm_instance(bool groupentry)
     {
         if (!s.renderer_output())  // Skip if not a renderer output
             continue;
-        // Try to look up the sym among the outputs with the full layer.name
-        // specification first. If that fails, look for name only.
-        ustring layersym = ustring::fmtformat("{}.{}", inst()->layername(),
-                                              s.name());
-        auto symloc      = group().find_symloc(layersym, SymArena::Outputs);
-        if (!symloc)
-            symloc = group().find_symloc(s.name(), SymArena::Outputs);
+        auto symloc = group().find_symloc(s.name(), inst()->layername(),
+                                          SymArena::Outputs);
         if (!symloc) {
             // std::cout << "No output copy for " << s.name()
             //           << " because no symloc was found\n";
@@ -2094,7 +2104,7 @@ BackendLLVM::run()
 #endif
 
 #ifdef OSL_LLVM_NO_BITCODE
-        OSL_ASSERT(!use_rs_bitcode());
+        OSL_DASSERT(!use_rs_bitcode());
         ll.module(ll.new_module("llvm_ops"));
 #    if OSL_USE_OPTIX
         if (use_optix()) {
@@ -2490,6 +2500,14 @@ BackendLLVM::run()
                 group().llvm_compiled_layer(nlayers - 1));
     }
 
+    if (shadingsys().use_optix_cache()) {
+        std::string cache_key = group().optix_cache_key();
+        renderer()->cache_insert(
+            "optix_ptx", cache_key,
+            optix_cache_wrap(group().m_llvm_ptx_compiled_version,
+                             group().llvm_groupdata_size()));
+    }
+
     // We are destroying the entire module below,
     // no reason to bother destroying individual functions
 #if 0
@@ -2528,4 +2546,4 @@ BackendLLVM::run()
 
 
 };  // namespace pvt
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END

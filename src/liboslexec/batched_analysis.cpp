@@ -25,7 +25,7 @@ using namespace OSL;
 using namespace OSL::pvt;
 
 
-OSL_NAMESPACE_ENTER
+OSL_NAMESPACE_BEGIN
 
 namespace Strings {
 
@@ -2175,11 +2175,8 @@ struct Analyzer {
         const SymLocationDesc* symloc = nullptr;
         if (interpolate_param) {
             // See if userdata input placement has been used for this symbol
-            ustring layersym = ustring::fmtformat("{}.{}", inst()->layername(),
-                                                  s.name());
-            symloc = m_ba.group().find_symloc(layersym, SymArena::UserData);
-            if (!symloc)
-                symloc = m_ba.group().find_symloc(s.name(), SymArena::UserData);
+            symloc = m_ba.group().find_symloc(s.name(), inst()->layername(),
+                                              SymArena::UserData);
             if (symloc != nullptr) {
                 // We copy values from userdata pre-placement which always succeeds
                 // We must track this write, not because it will need to be masked
@@ -2992,4 +2989,4 @@ BatchedAnalysis::dump_layer(ShaderInstance* inst)
 }
 
 };  // namespace pvt
-OSL_NAMESPACE_EXIT
+OSL_NAMESPACE_END
